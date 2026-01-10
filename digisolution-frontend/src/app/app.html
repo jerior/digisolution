@@ -1,0 +1,114 @@
+<style>
+  :host {
+    --bright-blue: oklch(51.01% 0.274 263.83);
+    --electric-violet: oklch(53.18% 0.28 296.97);
+    --french-violet: oklch(47.66% 0.246 305.88);
+    --vivid-pink: oklch(69.02% 0.277 332.77);
+    --hot-red: oklch(61.42% 0.238 15.34);
+    --orange-red: oklch(63.32% 0.24 31.68);
+
+    --gray-900: oklch(19.37% 0.006 300.98);
+    --gray-700: oklch(36.98% 0.014 302.71);
+    --gray-400: oklch(70.9% 0.015 304.04);
+
+    --red-to-pink-to-purple-vertical-gradient: linear-gradient(
+      180deg,
+      var(--orange-red) 0%,
+      var(--vivid-pink) 50%,
+      var(--electric-violet) 100%
+    );
+
+    --red-to-pink-to-purple-horizontal-gradient: linear-gradient(
+      90deg,
+      var(--orange-red) 0%,
+      var(--vivid-pink) 50%,
+      var(--electric-violet) 100%
+    );
+
+    --pill-accent: var(--bright-blue);
+
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji",
+    "Segoe UI Symbol";
+    box-sizing: border-box;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+</style>
+
+<div class="container">
+  <div class="panel left-panel">
+    <h2>Доступные элементы</h2>
+
+    <div class="controls">
+      <input
+        type="text"
+        [value]="leftFilter$ | async"
+        (input)="onLeftFilterChange($event)"
+        placeholder="Фильтр по ID"
+        class="filter-input"
+      />
+      <div class="add-section">
+        <input
+          type="number"
+          [value]="newItemId$ | async"
+          (input)="onNewItemIdChange($event)"
+          placeholder="Новый ID"
+          class="filter-input"
+        />
+        <button (click)="addNewItem()" class="btn-add">Добавить</button>
+      </div>
+    </div>
+
+    <div class="items-container" (scroll)="onLeftScroll($event)">
+      @for (item of availableItems$ | async; track item.id) {
+        <div
+          class="item"
+          (click)="selectItem(item)"
+        >
+          ID: {{ item.id }}
+          <span class="action">→</span>
+        </div>
+      }
+      @if (leftLoading$ | async) {
+        <div class="loading">Загрузка...</div>
+      }
+    </div>
+  </div>
+
+  <div class="panel right-panel">
+    <h2>Выбранные элементы</h2>
+
+    <div class="controls">
+      <input
+        type="text"
+        [value]="rightFilter$ | async"
+        (input)="onRightFilterChange($event)"
+        placeholder="Фильтр по ID"
+        class="filter-input"
+      />
+    </div>
+
+    <div
+      class="items-container"
+      (scroll)="onRightScroll($event)"
+      (dragover)="onDragOver($event)"
+    >
+      @for (item of selectedItems$ | async; track item.id; let i = $index) {
+        <div
+          class="item selected"
+          draggable="true"
+          (dragstart)="onDragStart($event, i)"
+          (drop)="onDrop($event, i)"cd dir=""
+        >
+          <span class="drag-handle">⋮⋮</span>
+          ID: {{ item.id }}
+          <span class="action" (click)="deselectItem(item)">×</span>
+        </div>
+      }
+      @if (rightLoading$ | async) {
+        <div class="loading">Загрузка...</div>
+      }
+    </div>
+  </div>
+</div>

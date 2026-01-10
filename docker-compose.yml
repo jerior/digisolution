@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./digisolution-backend
+      dockerfile: Dockerfile
+    container_name: digisolution-backend
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    restart: unless-stopped
+    networks:
+      - digisolution-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/items/available?limit=1"]
+      interval: 30s
+      timeout: 10s
+      retries: 1
+      start_period: 40s
+
+  frontend:
+    build:
+      context: ./digisolution-frontend
+      dockerfile: Dockerfile
+    container_name: digisolution-frontend
+    ports:
+      - "80:80"
+    environment:
+      - API_URL=http://localhost
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - digisolution-network
+
+networks:
+  digisolution-network:
+    driver: bridge

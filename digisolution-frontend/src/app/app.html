@@ -60,6 +60,9 @@
       </div>
     </div>
 
+    @if (leftSyncing$ | async) {
+      <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+    }
     <div class="items-container" (scroll)="onLeftScroll($event)">
       @for (item of availableItems$ | async; track item.id) {
         <div
@@ -70,8 +73,10 @@
           <span class="action">→</span>
         </div>
       }
-      @if (leftLoading$ | async) {
-        <div class="loading">Загрузка...</div>
+      @if (leftHasMoreSubject$ | async) {
+        <div class="centered">
+          <button matButton="outlined" (click)="checkAndLoadMoreLeft()"> Показать еще</button>
+        </div>
       }
     </div>
   </div>
@@ -89,6 +94,9 @@
       />
     </div>
 
+    @if (rightSyncing$ | async) {
+      <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+    }
     <div
       class="items-container"
       (scroll)="onRightScroll($event)"
@@ -99,15 +107,17 @@
           class="item selected"
           draggable="true"
           (dragstart)="onDragStart($event, i)"
-          (drop)="onDrop($event, i)"cd dir=""
+          (drop)="onDrop($event, i)"
         >
           <span class="drag-handle">⋮⋮</span>
           ID: {{ item.id }}
           <span class="action" (click)="deselectItem(item)">×</span>
         </div>
       }
-      @if (rightLoading$ | async) {
-        <div class="loading">Загрузка...</div>
+      @if (rightHasMoreSubject$ | async) {
+        <div class="centered">
+          <button matButton="outlined" (click)="checkAndLoadMoreRight()"> Показать еще</button>
+        </div>
       }
     </div>
   </div>

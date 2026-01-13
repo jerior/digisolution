@@ -13,6 +13,8 @@ import { HttpClient } from '@angular/common/http';
 import {FormsModule} from '@angular/forms';
 import { AsyncPipe } from '@angular/common';
 import { environment } from '../environments/environment';
+import {MatProgressBarModule} from '@angular/material/progress-bar';
+import {MatButtonModule} from '@angular/material/button';
 
 interface Item {
   id: number;
@@ -27,7 +29,7 @@ interface ItemsResponse {
 
 @Component({
   selector: 'app-root',
-  imports: [FormsModule, AsyncPipe],
+  imports: [FormsModule, AsyncPipe, MatProgressBarModule, MatButtonModule],
   standalone: true,
   templateUrl: './app.html',
   styleUrl: './app.css'
@@ -44,8 +46,9 @@ export class App implements OnInit, OnDestroy {
   private leftPageSubject = new BehaviorSubject<number>(0);
   private rightPageSubject = new BehaviorSubject<number>(0);
 
-  private leftLoadingSubject = new BehaviorSubject<boolean>(false);
-  private rightLoadingSubject = new BehaviorSubject<boolean>(false);
+  // Индикаторы синхронизации с сервером
+  private leftSyncingSubject = new BehaviorSubject<boolean>(false);
+  private rightSyncingSubject = new BehaviorSubject<boolean>(false);
 
   private leftHasMoreSubject = new BehaviorSubject<boolean>(true);
   private rightHasMoreSubject = new BehaviorSubject<boolean>(true);
@@ -61,8 +64,11 @@ export class App implements OnInit, OnDestroy {
   rightFilter$ = this.rightFilterSubject.asObservable();
   newItemId$ = this.newItemIdSubject.asObservable();
 
-  leftLoading$ = this.leftLoadingSubject.asObservable();
-  rightLoading$ = this.rightLoadingSubject.asObservable();
+  leftSyncing$ = this.leftSyncingSubject.asObservable();
+  rightSyncing$ = this.rightSyncingSubject.asObservable();
+
+  rightHasMoreSubject$ = this.rightHasMoreSubject.asObservable();
+  leftHasMoreSubject$ = this.leftHasMoreSubject.asObservable();
 
   availableItems$ = this.availableItemsSubject.asObservable();
   selectedItems$ = this.selectedItemsSubject.asObservable();
@@ -104,7 +110,7 @@ export class App implements OnInit, OnDestroy {
           });
         }
 
-        this.leftLoadingSubject.next(true);
+        this.leftSyncingSubject.next(true);
 
         return this.http.get<ItemsResponse>(`${this.apiUrl}/items/available`, {
           params: {
@@ -113,7 +119,7 @@ export class App implements OnInit, OnDestroy {
             filter: filter
           }
         }).pipe(
-          tap(() => this.leftLoadingSubject.next(false))
+          tap(() => this.leftSyncingSubject.next(false))
         );
       }),
       takeUntil(this.destroy$)
@@ -124,7 +130,7 @@ export class App implements OnInit, OnDestroy {
         this.leftHasMoreSubject.next(response.hasMore);
       },
       error: () => {
-        this.leftLoadingSubject.next(false);
+        this.leftSyncingSubject.next(false);
       }
     });
   }
@@ -133,7 +139,7 @@ export class App implements OnInit, OnDestroy {
     // Stream для загрузки выбранных элементов
     combineLatest([
       this.rightFilterSubject.pipe(
-        debounceTime(300),
+        debounceTime(100),
         distinctUntilChanged(),
         tap(() => {
           this.rightPageSubject.next(0);
@@ -152,7 +158,7 @@ export class App implements OnInit, OnDestroy {
           });
         }
 
-        this.rightLoadingSubject.next(true);
+        this.rightSyncingSubject.next(true);
 
         return this.http.get<ItemsResponse>(`${this.apiUrl}/items/selected`, {
           params: {
@@ -161,7 +167,7 @@ export class App implements OnInit, OnDestroy {
             filter: filter
           }
         }).pipe(
-          tap(() => this.rightLoadingSubject.next(false))
+          tap(() => this.rightSyncingSubject.next(false))
         );
       }),
       takeUntil(this.destroy$)
@@ -172,7 +178,7 @@ export class App implements OnInit, OnDestroy {
         this.rightHasMoreSubject.next(response.hasMore);
       },
       error: () => {
-        this.rightLoadingSubject.next(false);
+        this.rightSyncingSubject.next(false);
       }
     });
   }
@@ -196,7 +202,7 @@ export class App implements OnInit, OnDestroy {
     const element = event.target as HTMLElement;
     const bottom = element.scrollHeight - element.scrollTop <= element.clientHeight + 50;
 
-    if (bottom && !this.leftLoadingSubject.value && this.leftHasMoreSubject.value) {
+    if (bottom && !this.leftSyncingSubject.value && this.leftHasMoreSubject.value) {
       this.leftPageSubject.next(this.leftPageSubject.value + 1);
     }
   }
@@ -205,44 +211,142 @@ export class App implements OnInit, OnDestroy {
     const element = event.target as HTMLElement;
     const bottom = element.scrollHeight - element.scrollTop <= element.clientHeight + 50;
 
-    if (bottom && !this.rightLoadingSubject.value && this.rightHasMoreSubject.value) {
+    if (bottom && !this.rightSyncingSubject.value && this.rightHasMoreSubject.value) {
+      this.rightPageSubject.next(this.rightPageSubject.value + 1);
+    }
+  }
+
+  checkAndLoadMoreLeft() {
+    const container = document.querySelector('.left-panel .items-container') as HTMLElement;
+    if (!container) return;
+
+    const hasScroll = container.scrollHeight > container.clientHeight;
+
+    // Если нет скролла и есть еще данные, загружаем следующую страницу
+    if (!hasScroll && this.leftHasMoreSubject.value && !this.leftSyncingSubject.value) {
+      this.leftPageSubject.next(this.leftPageSubject.value + 1);
+    }
+  }
+
+  checkAndLoadMoreRight() {
+    const container = document.querySelector('.right-panel .items-container') as HTMLElement;
+    if (!container) return;
+
+    const hasScroll = container.scrollHeight > container.clientHeight;
+
+    // Если нет скролла и есть еще данные, загружаем следующую страницу
+    if (!hasScroll && this.rightHasMoreSubject.value && !this.rightSyncingSubject.value) {
       this.rightPageSubject.next(this.rightPageSubject.value + 1);
     }
   }
 
   selectItem(item: Item) {
+    // Оптимистичное обновление UI - сразу показываем изменения
+    const available = this.availableItemsSubject.value.filter(i => i.id !== item.id);
+    this.availableItemsSubject.next(available);
+
+    const selected = [...this.selectedItemsSubject.value, item];
+    this.selectedItemsSubject.next(selected);
+
+    // Показываем индикатор синхронизации
+    this.rightSyncingSubject.next(true);
+
+    // Отправляем запрос на сервер
     this.http.post(`${this.apiUrl}/items/select`, { id: item.id })
       .pipe(takeUntil(this.destroy$))
-      .subscribe(() => {
-        // Удаляем из доступных
-        const available = this.availableItemsSubject.value.filter(i => i.id !== item.id);
-        this.availableItemsSubject.next(available);
-
-        // Обновляем выбранные через 1 секунду (после батчинга)
-        setTimeout(() => {
-          this.rightPageSubject.next(0);
-          this.rightHasMoreSubject.next(true);
-          this.selectedItemsSubject.next([]);
-          this.refreshRightSubject.next();
-        }, 1100);
+      .subscribe({
+        next: () => {
+          // Обновляем из API через 1 секунду (после батчинга)
+          setTimeout(() => {
+            this.refreshSelectedFromServer();
+          }, 1100);
+        },
+        error: (err) => {
+          // При ошибке откатываем изменения
+          console.error('Error selecting item:', err);
+          this.availableItemsSubject.next([...this.availableItemsSubject.value, item]);
+          const revertSelected = this.selectedItemsSubject.value.filter(i => i.id !== item.id);
+          this.selectedItemsSubject.next(revertSelected);
+          this.rightSyncingSubject.next(false);
+          alert('Ошибка при выборе элемента. Попробуйте снова.');
+        }
       });
   }
 
   deselectItem(item: Item) {
+    // Оптимистичное обновление UI - сразу показываем изменения
+    const selected = this.selectedItemsSubject.value.filter(i => i.id !== item.id);
+    this.selectedItemsSubject.next(selected);
+
+    const available = [...this.availableItemsSubject.value, item];
+    this.availableItemsSubject.next(available);
+
+    // Показываем индикатор синхронизации
+    this.leftSyncingSubject.next(true);
+
+    // Отправляем запрос на сервер
     this.http.post(`${this.apiUrl}/items/deselect`, { id: item.id })
       .pipe(takeUntil(this.destroy$))
-      .subscribe(() => {
-        // Удаляем из выбранных
-        const selected = this.selectedItemsSubject.value.filter(i => i.id !== item.id);
-        this.selectedItemsSubject.next(selected);
+      .subscribe({
+        next: () => {
+          // Обновляем из API через 1 секунду (после батчинга)
+          setTimeout(() => {
+            this.refreshAvailableFromServer();
+          }, 1100);
+        },
+        error: (err) => {
+          // При ошибке откатываем изменения
+          console.error('Error deselecting item:', err);
+          this.selectedItemsSubject.next([...this.selectedItemsSubject.value, item]);
+          const revertAvailable = this.availableItemsSubject.value.filter(i => i.id !== item.id);
+          this.availableItemsSubject.next(revertAvailable);
+          this.leftSyncingSubject.next(false);
+          alert('Ошибка при отмене выбора. Попробуйте снова.');
+        }
+      });
+  }
 
-        // Обновляем доступные через 1 секунду (после батчинга)
-        setTimeout(() => {
-          this.leftPageSubject.next(0);
-          this.leftHasMoreSubject.next(true);
-          this.availableItemsSubject.next([]);
-          this.refreshLeftSubject.next();
-        }, 1100);
+  // Метод для обновления выбранных элементов с сервера
+  private refreshSelectedFromServer() {
+    this.http.get<ItemsResponse>(`${this.apiUrl}/items/selected`, {
+      params: {
+        page: '0',
+        limit: '1000', // Загружаем все для синхронизации
+        filter: ''
+      }
+    }).pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (response) => {
+          // Обновляем список из API (источник истины)
+          this.selectedItemsSubject.next(response.items);
+          this.rightSyncingSubject.next(false);
+        },
+        error: (err) => {
+          console.error('Error refreshing selected items:', err);
+          this.rightSyncingSubject.next(false);
+        }
+      });
+  }
+
+  // Метод для обновления доступных элементов с сервера
+  private refreshAvailableFromServer() {
+    this.http.get<ItemsResponse>(`${this.apiUrl}/items/available`, {
+      params: {
+        page: '0',
+        limit: '1000', // Загружаем все для синхронизации
+        filter: ''
+      }
+    }).pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (response) => {
+          // Обновляем список из API (источник истины)
+          this.availableItemsSubject.next(response.items);
+          this.leftSyncingSubject.next(false);
+        },
+        error: (err) => {
+          console.error('Error refreshing available items:', err);
+          this.leftSyncingSubject.next(false);
+        }
       });
   }
 
@@ -254,7 +358,6 @@ export class App implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: () => {
-          alert('Элемент добавлен в очередь. Появится через 10 секунд.');
           this.newItemIdSubject.next(null);
 
           // Обновляем доступные через 10 секунд (после батчинга)
@@ -263,7 +366,7 @@ export class App implements OnInit, OnDestroy {
             this.leftHasMoreSubject.next(true);
             this.availableItemsSubject.next([]);
             this.refreshLeftSubject.next();
-          }, 10100);
+          }, 10000);
         },
         error: (err) => {
           alert(err.error?.error || 'Ошибка добавления');
